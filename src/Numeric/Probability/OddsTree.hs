@@ -25,27 +25,24 @@ unfoldProb f = r where
 probOf :: Eq a => a -> Prob a -> Rational
 probOf e = foldProb f b where
   b x = fi (e == x) 1 0
-  f x r y = (x * n + y * d) / (n + d) where
-    n = fromInteger (numerator r)
-    d = fromInteger (denominator r)
+  f x r y = x * (n % nd) + y * (d % nd) where
+    n = numerator r
+    d = denominator r
+    nd = n + d
 
 uniform :: [a] -> Maybe (Prob a)
 uniform [] = Nothing
 uniform xxs = Just (unfoldProb f (xxs,length xxs)) where
   f ([x],_) = Left x
   f (xs,n) = Right ((ys,l), fromIntegral l % fromIntegral r, (zs,r)) where
-    l = n `div` 2
-    r = n - l
-    (ys,zs) = splitAt l xs
+    (ys,zs,l,r) = splitEven xs n
 
 fromDistrib :: [(a,Integer)] -> Maybe (Prob a)
 fromDistrib [] = Nothing
 fromDistrib xxs = Just (unfoldProb f (xxs,length xxs)) where
   f ([(x,_)],_) = Left x
   f (xs,n) = Right ((ys,l), tots ys % tots zs , (zs,r)) where
-    l = n `div` 2
-    r = n - l
-    (ys,zs) = splitAt l xs
+    (ys,zs,l,r) = splitEven xs n
   tots = sum . map snd
 
 toSorted :: Ord a => [a] -> Maybe (Prob a)
@@ -67,7 +64,6 @@ instance Applicative Prob where
 
 instance Monad Prob where
   x >>= f = flatten (f <$> x)
-
 
 -- | >>> toDistrib <$> uniform [0,0,1]
 -- Just [(0,1),(0,1),(1,1)]
