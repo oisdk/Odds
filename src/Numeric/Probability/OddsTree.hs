@@ -68,6 +68,7 @@ instance Applicative Prob where
 instance Monad Prob where
   x >>= f = flatten (f <$> x)
 
+
 -- | >>> toDistrib <$> uniform [0,0,1]
 -- Just [(0,1),(0,1),(1,1)]
 toDistrib :: Prob a -> [(a,Integer)]
