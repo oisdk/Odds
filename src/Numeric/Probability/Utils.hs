@@ -1,8 +1,8 @@
 module Numeric.Probability.Utils where
 
+import           Data.Foldable
 import qualified Data.Map.Strict as Map
-import Data.Ratio
-import Data.Foldable
+import           Data.Ratio
 
 
 counts :: (Ord a, Num n) => [(a,n)] -> [(a,n)]
