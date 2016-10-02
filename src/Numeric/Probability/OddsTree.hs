@@ -1,49 +1,46 @@
-{-# LANGUAGE DeriveFoldable  #-}
-{-# LANGUAGE DeriveFunctor   #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveFunctor  #-}
 
 module Numeric.Probability.OddsTree where
 
 import           Data.List
 import           Data.Ratio
+import           Numeric.Probability.Utils
 
-data Odds a = Certain a
-            | Odds (Odds a) Rational (Odds a)
+data Prob a = Certain a
+            | Choice (Prob a) Rational (Prob a)
             deriving (Eq, Functor, Foldable, Show)
 
-foldOdds :: (b -> Rational -> b -> b) -> (a -> b) -> Odds a -> b
-foldOdds f b = r where
+foldProb :: (b -> Rational -> b -> b) -> (a -> b) -> Prob a -> b
+foldProb f b = r where
   r (Certain x) = b x
-  r (Odds xs p ys) = f (r xs) p (r ys)
+  r (Choice xs p ys) = f (r xs) p (r ys)
 
-unfoldOdds :: (b -> Either a (b,Rational,b)) -> b -> Odds a
-unfoldOdds f = r where
+unfoldProb :: (b -> Either a (b,Rational,b)) -> b -> Prob a
+unfoldProb f = r where
   r b = case f b of
     Left a -> Certain a
-    Right (x,p,y) -> Odds (r x) p (r y)
+    Right (x,p,y) -> Choice (r x) p (r y)
 
-fi :: Bool -> a -> a -> a
-fi True  t _ = t
-fi False _ f = f
-
-probOf :: Eq a => a -> Odds a -> Rational
-probOf e = foldOdds f b where
+probOf :: Eq a => a -> Prob a -> Rational
+probOf e = foldProb f b where
   b x = fi (e == x) 1 0
   f x r y = (x * n + y * d) / (n + d) where
     n = fromInteger (numerator r)
     d = fromInteger (denominator r)
 
-equalOdds :: [a] -> Maybe (Odds a)
-equalOdds [] = Nothing
-equalOdds xxs = Just (unfoldOdds f (xxs,length xxs)) where
+uniform :: [a] -> Maybe (Prob a)
+uniform [] = Nothing
+uniform xxs = Just (unfoldProb f (xxs,length xxs)) where
   f ([x],_) = Left x
   f (xs,n) = Right ((ys,l), fromIntegral l % fromIntegral r, (zs,r)) where
     l = n `div` 2
     r = n - l
     (ys,zs) = splitAt l xs
 
-fromDistrib :: [(a,Integer)] -> Maybe (Odds a)
+fromDistrib :: [(a,Integer)] -> Maybe (Prob a)
 fromDistrib [] = Nothing
-fromDistrib xxs = Just (unfoldOdds f (xxs,length xxs)) where
+fromDistrib xxs = Just (unfoldProb f (xxs,length xxs)) where
   f ([(x,_)],_) = Left x
   f (xs,n) = Right ((ys,l), tots ys % tots zs , (zs,r)) where
     l = n `div` 2
@@ -51,9 +48,9 @@ fromDistrib xxs = Just (unfoldOdds f (xxs,length xxs)) where
     (ys,zs) = splitAt l xs
   tots = sum . map snd
 
-toSorted :: Ord a => [a] -> Maybe (Odds a)
+toSorted :: Ord a => [a] -> Maybe (Prob a)
 toSorted [] = Nothing
-toSorted xxs = Just (unfoldOdds f xxs) where
+toSorted xxs = Just (unfoldProb f xxs) where
   f [x] = Left x
   f (x:xxxs) = case partition (<x) xxxs of
     ([],ys) -> Right ([x], 1 % fromIntegral (length ys),ys)
@@ -61,15 +58,28 @@ toSorted xxs = Just (unfoldOdds f xxs) where
     (xs,ys) -> Right (xs, fromIntegral (length xs) % fromIntegral (length ys + 1), x:ys)
   f [] = undefined
 
-flatten :: Odds (Odds a) -> Odds a
-flatten = foldOdds Odds id
+flatten :: Prob (Prob a) -> Prob a
+flatten = foldProb Choice id
 
-instance Applicative Odds where
+instance Applicative Prob where
   pure = Certain
   fs <*> xs = flatten (fmap (<$> xs) fs)
 
-instance Monad Odds where
+instance Monad Prob where
   x >>= f = flatten (f <$> x)
 
--- compress :: Ord a => Odds a -> Odds a
--- compress xs = let Just ys = (fromDistrib . counts) xs in ys
+-- | >>> toDistrib <$> uniform [0,0,1]
+-- Just [(0,1),(0,1),(1,1)]
+toDistrib :: Prob a -> [(a,Integer)]
+toDistrib = factorOut . foldProb f b where
+  b x = [(x,1)]
+  f l p r = (map.fmap) (n%t*) l ++ (map.fmap) (d%t*) r where
+    n = numerator p
+    d = denominator p
+    t = n + d
+  factorOut xs = (map.fmap) (numerator . (lcd'*)) xs where
+    lcd' = fromIntegral . lcd . map snd $ xs
+
+
+compress :: Ord a => Prob a -> Prob a
+compress xs = let Just ys = (fromDistrib . counts . toDistrib) xs in ys
